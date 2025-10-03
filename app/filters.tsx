@@ -1,168 +1,112 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-
-export const options = {
-  headerShown: false,
-};
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const FILTERS = {
   type: ['Фільми', 'Серіали'],
   genre: ['Драма', 'Комедія', 'Бойовик', 'Фантастика'],
+  year: ['2025', '2024', '2023', '2022', '2021'],
+  country: ['США', 'Велика Британія', 'Україна'],
 };
 
 export default function FiltersScreen() {
   const router = useRouter();
-
-  const [selectedFilters, setSelectedFilters] = useState({
+  const [selected, setSelected] = useState({
     type: '',
     genre: '',
+    year: '',
+    country: '',
   });
 
-  const toggleFilter = (category: 'type' | 'genre', value: string) => {
-    setSelectedFilters((prev) => ({
+  const toggle = (category: keyof typeof FILTERS, value: string) => {
+    setSelected((prev) => ({
       ...prev,
       [category]: prev[category] === value ? '' : value,
     }));
   };
 
-  const isShowEnabled = selectedFilters.type !== '' || selectedFilters.genre !== '';
+  const isShowEnabled = Object.values(selected).some((v) => v !== '');
+  const selectedCount = Object.values(selected).filter((v) => v !== '').length;
 
   const onShowPress = () => {
-    router.push(
-      `/search?type=${encodeURIComponent(selectedFilters.type)}&genre=${encodeURIComponent(selectedFilters.genre)}`
-    );
+    const params = Object.entries(selected)
+      .filter(([, value]) => value !== '')
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+      .join('&');
+    router.push(`/show?${params}`);
   };
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-        <Text style={styles.backButtonText}>← Назад</Text>
+    <View style={styles.wrapper}>
+      {/* Кнопка Назад */}
+      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <Ionicons name="arrow-back" size={18} color="#000" />
+        <Text style={styles.backText}>Назад</Text>
       </TouchableOpacity>
 
-      {/* Фільтр Тип */}
-      <View style={styles.filterSection}>
-        <Text style={styles.filterTitle}>Тип</Text>
-        <View style={styles.optionsRow}>
-          {FILTERS.type.map((value) => {
-            const selected = selectedFilters.type === value;
-            return (
-              <TouchableOpacity
-                key={value}
-                style={[styles.optionButton, selected && styles.optionButtonSelected]}
-                onPress={() => toggleFilter('type', value)}
-              >
-                <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
-                  {value}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Фільтр Жанр */}
-      <View style={styles.filterSection}>
-        <Text style={styles.filterTitle}>Жанр</Text>
-        <View style={styles.optionsRow}>
-          {FILTERS.genre.map((value) => {
-            const selected = selectedFilters.genre === value;
-            return (
-              <TouchableOpacity
-                key={value}
-                style={[styles.optionButton, selected && styles.optionButtonSelected]}
-                onPress={() => toggleFilter('genre', value)}
-              >
-                <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
-                  {value}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
+      <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+        {Object.entries(FILTERS).map(([category, values]) => (
+          <View key={category} style={styles.section}>
+            <Text style={styles.sectionTitle}>{category.toUpperCase()}</Text>
+            <View style={styles.row}>
+              {values.map((value) => {
+                const selectedValue = selected[category as keyof typeof FILTERS] === value;
+                return (
+                  <TouchableOpacity key={value} onPress={() => toggle(category as keyof typeof FILTERS, value)}>
+                    <View style={[styles.option, selectedValue && styles.optionSelected]}>
+                      <Text style={[styles.optionText, selectedValue && styles.optionTextSelected]}>
+                        {value}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
 
       {/* Кнопка Показати */}
-      <TouchableOpacity
-        style={[styles.showButton, !isShowEnabled && styles.showButtonDisabled]}
-        disabled={!isShowEnabled}
-        onPress={onShowPress}
-      >
-        <Text style={[styles.showButtonText, isShowEnabled && { color: '#000' }]}>Показати</Text>
-      </TouchableOpacity>
+      <SafeAreaView edges={['bottom']} style={{ padding: 10 }}>
+        <TouchableOpacity
+          style={[styles.showButton, !isShowEnabled && styles.showButtonDisabled]}
+          disabled={!isShowEnabled}
+          onPress={onShowPress}
+        >
+          <Text style={[styles.showButtonText, isShowEnabled && { color: '#000' }]}>
+            Показати {selectedCount > 0 ? `(${selectedCount})` : ''}
+          </Text>
+        </TouchableOpacity>
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    paddingTop: 50,
-    paddingHorizontal: 20,
-  },
-
-  backButton: {
-    marginBottom: 20,
-  },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 18,
-  },
-
-  filterSection: {
-    marginBottom: 30,
-  },
-  filterTitle: {
-    color: '#999',
-    fontSize: 16,
-    marginBottom: 12,
-    fontWeight: '600',
-  },
-
-  optionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-
-  optionButton: {
-    backgroundColor: '#444',
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 25,
-    marginRight: 10,
-    marginBottom: 10,
-  },
-  optionButtonSelected: {
-    backgroundColor: '#fff',
-  },
-
-  optionText: {
-    color: '#bbb',
-    fontWeight: '600',
-  },
-  optionTextSelected: {
-    color: '#000',
-  },
-
-  showButton: {
-    backgroundColor: '#fff',
-    paddingVertical: 14,
-    borderRadius: 30,
-    justifyContent: 'center',
+  wrapper: { flex: 1, backgroundColor: '#030f26', paddingTop: 50, paddingHorizontal: 20 },
+  backButton: { 
+  flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 22,
+    alignSelf: 'flex-start',
+    marginLeft: 0,
+    marginBottom: 15,
   },
-  showButtonDisabled: {
-    backgroundColor: '#777',
-  },
-  showButtonText: {
-    color: '#000',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+    backText: { color: '#000', fontSize: 16, fontWeight: 'bold', marginLeft: 6 },
+
+  section: { marginBottom: 25 },
+  sectionTitle: { color: '#888', fontWeight: '600', marginBottom: 12, fontSize: 16 },
+  row: { flexDirection: 'row', flexWrap: 'wrap' },
+  option: { backgroundColor: '#062152ff', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 25, marginRight: 10, marginBottom: 10 },
+  optionSelected: { backgroundColor: '#fff' },
+  optionText: { color: '#bbb', fontWeight: '600' },
+  optionTextSelected: { color: '#000' },
+  showButton: { backgroundColor: '#fff', paddingVertical: 14, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+  showButtonDisabled: { backgroundColor: '#444' },
+  showButtonText: { color: '#000', fontWeight: 'bold', fontSize: 18 },
 });

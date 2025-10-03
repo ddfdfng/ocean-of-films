@@ -1,47 +1,53 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Image,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { fetchImages, fetchMovieCredits, fetchMovieDetails, fetchYoutubeTrailer } from '../api/tmdb';
 
-const API_KEY = 'b53e87d6d9e6dd2ea9fd63e73fe99e4c';
-const BASE_URL = 'https://api.themoviedb.org/3';
+const { width } = Dimensions.get('window');
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
 
 export default function DetailsScreen() {
-  const { id, type } = useLocalSearchParams<{ id: string; type: string }>();
+  const { id, type } = useLocalSearchParams();
   const router = useRouter();
-
-  const [movie, setMovie] = useState<any>(null);
+  const [details, setDetails] = useState<any>(null);
+  const [cast, setCast] = useState<any[]>([]);
+  const [images, setImages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [youtubeUrl, setYoutubeUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!id || !type) return;
+    const load = async () => {
+      setLoading(true);
+      const contentType = type as 'movie' | 'tv';
+      const [detailData, creditsData, imagesData, trailerUrl] = await Promise.all([
+        fetchMovieDetails(id as string, contentType),
+        fetchMovieCredits(id as string, contentType),
+        fetchImages(id as string, contentType),
+        fetchYoutubeTrailer(id as string, contentType),
+      ]);
 
-    const fetchDetails = async () => {
-      try {
-        const response = await fetch(
-          `${BASE_URL}/${type}/${id}?api_key=${API_KEY}&append_to_response=credits,watch/providers`
-        );
-        const data = await response.json();
-        setMovie(data);
-      } catch (error) {
-        console.error('Помилка при отриманні деталей:', error);
-      } finally {
-        setLoading(false);
-      }
+      setDetails(detailData);
+      setCast(creditsData.cast?.slice(0, 5) || []);
+      setImages((imagesData.backdrops || []).filter((img: any) => img.file_path));
+      setYoutubeUrl(trailerUrl);
+      setLoading(false);
     };
-
-    fetchDetails();
+    load();
   }, [id, type]);
 
-  if (loading) {
+  if (loading || !details) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#E50914" />
@@ -49,124 +55,122 @@ export default function DetailsScreen() {
     );
   }
 
-  if (!movie) {
-    return (
-      <View style={styles.center}>
-        <Text style={{ color: '#fff' }}>Фільм або серіал не знайдено</Text>
-      </View>
-    );
-  }
-
-  const actors = movie.credits?.cast?.slice(0, 5) || [];
-  const providers = movie['watch/providers']?.results?.UA?.flatrate || [];
-  const youtubeProviders = movie['watch/providers']?.results?.UA?.buy?.filter(
-    (p: any) => p.provider_name.toLowerCase() === 'youtube'
-  ) || [];
+  const openYoutube = () => {
+    if (youtubeUrl) Linking.openURL(youtubeUrl);
+  };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <TouchableOpacity onPress={() => router.back()}>
-        <Text style={styles.backButton}>← Назад</Text>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 150 }}>
+      {/* Кнопка Назад */}
+      <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <Ionicons name="arrow-back" size={18} color="#000" />
+        <Text style={styles.backText}>Назад</Text>
       </TouchableOpacity>
 
-      <Image
-        source={{ uri: `${IMAGE_BASE_URL}${movie.poster_path}` }}
-        style={styles.poster}
+      {/* Карусель зображень */}
+      <FlatList
+        data={images}
+        horizontal
+        keyExtractor={(_, index) => index.toString()}
+        renderItem={({ item }) =>
+          item.file_path ? (
+            <Image
+              source={{ uri: `${IMAGE_BASE_URL}${item.file_path}` }}
+              style={styles.carouselImage}
+            />
+          ) : null
+        }
+        showsHorizontalScrollIndicator={false}
+        style={styles.carousel}
       />
 
-      <Text style={styles.title}>{movie.title || movie.name}</Text>
+      {/* Назва */}
+      <Text style={styles.title}>{details.title || details.name}</Text>
 
-      <Text style={styles.overview}>{movie.overview}</Text>
+      {/* Короткий опис */}
+      <Text style={styles.sectionTitle}>📝 Про що:</Text>
+      <Text style={styles.overview}>{details.overview || 'Опис відсутній.'}</Text>
 
-      <Text style={styles.sectionTitle}>🎭 В головних ролях:</Text>
-      <View style={styles.actorsContainer}>
-        {actors.map((actor: any) => (
-          <Text key={actor.cast_id || actor.credit_id} style={styles.actorName}>
-            {actor.name}
-          </Text>
+      {/* Головні ролі */}
+      <Text style={styles.sectionTitle}>🎭 У головних ролях:</Text>
+      <View style={styles.castList}>
+        {cast.map((person) => (
+          <View key={person.id} style={styles.castItem}>
+            {person.profile_path ? (
+              <Image
+                source={{ uri: `${IMAGE_BASE_URL}${person.profile_path}` }}
+                style={styles.castImage}
+              />
+            ) : (
+              <View
+                style={[
+                  styles.castImage,
+                  { backgroundColor: '#444', justifyContent: 'center', alignItems: 'center' },
+                ]}
+              >
+                <Ionicons name="person-outline" size={30} color="#888" />
+              </View>
+            )}
+            <Text style={styles.castName}>{person.name}</Text>
+          </View>
         ))}
       </View>
 
-      <Text style={styles.sectionTitle}>📺 Доступно на платформах:</Text>
-      <View style={styles.platformsContainer}>
-        {providers.length === 0 && youtubeProviders.length === 0 && (
-          <Text style={{ color: '#fff' }}>Немає доступних платформ для перегляду в Україні</Text>
-        )}
-
-        {providers.map((provider: any) => (
-          <Text key={provider.provider_id} style={styles.platformText}>
-            {provider.provider_name}
-          </Text>
-        ))}
-
-        {youtubeProviders.length > 0 && (
-          <Text style={[styles.platformText, { fontWeight: 'bold', marginTop: 10 }]}>
-            Також доступно на YouTube
-          </Text>
-        )}
-      </View>
+      {/* Кнопка перегляду */}
+      {youtubeUrl && (
+        <TouchableOpacity style={styles.watchButton} onPress={openYoutube}>
+          <Ionicons name="logo-youtube" size={22} color="#fff" />
+          <Text style={styles.watchButtonText}>Переглянути</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#000',
-  },
-  container: {
-    backgroundColor: '#000',
-    padding: 20,
-    paddingBottom: 40,
-  },
+  container: { flex: 1, backgroundColor: '#030f26', paddingTop: 50 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
+
   backButton: {
-    color: '#fff',
-    fontSize: 18,
-    marginBottom: 15,
-  },
-  poster: {
-    width: '100%',
-    height: 500,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  title: {
-    color: '#fff',
-    fontSize: 26,
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
-  overview: {
-    color: '#ddd',
-    fontSize: 16,
-    marginBottom: 20,
-    lineHeight: 22,
-  },
-  sectionTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  actorsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 25,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 22,
+    alignSelf: 'flex-start',
+    marginLeft: 16,
   },
-  actorName: {
-    color: '#bbb',
-    fontSize: 14,
-    marginRight: 15,
-    marginBottom: 5,
+  backText: { color: '#000', fontSize: 16, fontWeight: 'bold', marginLeft: 6 },
+
+  title: { fontSize: 24, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginTop: 20 },
+
+  carousel: { marginTop: 10 },
+  carouselImage: {
+    width: width * 0.7,
+    height: width * 0.4,
+    borderRadius: 12,
+    marginHorizontal: 10,
   },
-  platformsContainer: {
-    marginBottom: 20,
+
+  sectionTitle: { color: '#fff', fontWeight: 'bold', fontSize: 18, marginHorizontal: 20, marginTop: 25 },
+  overview: { color: '#ccc', marginHorizontal: 20, marginTop: 10, fontSize: 15, lineHeight: 22 },
+
+  castList: { flexDirection: 'row', paddingHorizontal: 10, marginTop: 10 },
+  castItem: { alignItems: 'center', marginHorizontal: 10 },
+  castImage: { width: 60, height: 60, borderRadius: 30, marginBottom: 5, backgroundColor: '#222' },
+  castName: { color: '#fff', fontSize: 12, textAlign: 'center' },
+
+  watchButton: {
+    backgroundColor: '#ff0000ff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 30,
+    textAlign: 'center',
   },
-  platformText: {
-    color: '#fff',
-    fontSize: 16,
-    marginBottom: 5,
-  },
+  watchButtonText: { color: '#000', fontSize: 16, fontWeight: '600', marginLeft: 8 },
 });

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -12,9 +13,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  fetcchPopularMovies,
-  fetchPopularUkrTVShows,
+  fetchPopularMovies,
+  fetchLatestPlTVShows,
+  fetchLatestUkrTVShows,
   fetchTopRatedMovies,
 } from '../api/tmdb';
 
@@ -25,11 +28,14 @@ export const options = {
   headerShown: false,
 };
 
+type TabType = 'home' | 'favMovies' | 'favTV';
+
 export default function HomeScreen() {
-  const [activeTab, setActiveTab] = useState<'home' | 'favMovies' | 'favTV'>('home');
+  const [activeTab, setActiveTab] = useState<TabType>('home');
   const [popularMovies, setPopularMovies] = useState<any[]>([]);
   const [topRatedMovies, setTopRatedMovies] = useState<any[]>([]);
   const [popularUkrTV, setPopularUkrTV] = useState<any[]>([]);
+  const [latestPlTV, setLatestPlTV] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [favoritesMovies, setFavoritesMovies] = useState<any[]>([]);
   const [favoritesTV, setFavoritesTV] = useState<any[]>([]);
@@ -37,32 +43,64 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const loadAll = async () => {
-      const [popMovies, topMovies, ukrTV] = await Promise.all([
-        fetcchPopularMovies(),
+      const [popMovies, topMovies, ukrTV, plTV] = await Promise.all([
+        fetchPopularMovies(),
         fetchTopRatedMovies(),
-        fetchPopularUkrTVShows(),
+        fetchLatestUkrTVShows(),
+        fetchLatestPlTVShows(),
       ]);
-      setPopularMovies(popMovies);
-      setTopRatedMovies(topMovies);
-      setPopularUkrTV(ukrTV);
+
+      const sortByDate = (arr: any[], isTV = false) =>
+        [...arr].sort((a, b) => {
+          const dateA = new Date(isTV ? a.first_air_date : a.release_date).getTime();
+          const dateB = new Date(isTV ? b.first_air_date : b.release_date).getTime();
+          return dateB - dateA;
+        });
+
+      setPopularMovies(sortByDate(popMovies));
+      setTopRatedMovies(sortByDate(topMovies));
+      setPopularUkrTV(sortByDate(ukrTV, true));
+      setLatestPlTV(sortByDate(plTV, true));
+
+      await loadFavorites();
       setLoading(false);
     };
     loadAll();
   }, []);
 
+  const loadFavorites = async () => {
+    try {
+      const storedMovies = await AsyncStorage.getItem('favoritesMovies');
+      const storedTV = await AsyncStorage.getItem('favoritesTV');
+      if (storedMovies) setFavoritesMovies(JSON.parse(storedMovies));
+      if (storedTV) setFavoritesTV(JSON.parse(storedTV));
+    } catch (e) {
+      console.error('Error loading favorites', e);
+    }
+  };
+
+  const saveFavorites = async (movies: any[], tv: any[]) => {
+    try {
+      await AsyncStorage.setItem('favoritesMovies', JSON.stringify(movies));
+      await AsyncStorage.setItem('favoritesTV', JSON.stringify(tv));
+    } catch (e) {
+      console.error('Error saving favorites', e);
+    }
+  };
+
   const toggleFavorite = (item: any, isTV = false) => {
     if (isTV) {
-      if (favoritesTV.some(fav => fav.id === item.id)) {
-        setFavoritesTV(favoritesTV.filter(fav => fav.id !== item.id));
-      } else {
-        setFavoritesTV([...favoritesTV, item]);
-      }
+      const updated = favoritesTV.some(fav => fav.id === item.id)
+        ? favoritesTV.filter(fav => fav.id !== item.id)
+        : [...favoritesTV, item];
+      setFavoritesTV(updated);
+      saveFavorites(favoritesMovies, updated);
     } else {
-      if (favoritesMovies.some(fav => fav.id === item.id)) {
-        setFavoritesMovies(favoritesMovies.filter(fav => fav.id !== item.id));
-      } else {
-        setFavoritesMovies([...favoritesMovies, item]);
-      }
+      const updated = favoritesMovies.some(fav => fav.id === item.id)
+        ? favoritesMovies.filter(fav => fav.id !== item.id)
+        : [...favoritesMovies, item];
+      setFavoritesMovies(updated);
+      saveFavorites(updated, favoritesTV);
     }
   };
 
@@ -94,166 +132,191 @@ export default function HomeScreen() {
     </TouchableOpacity>
   );
 
+  const renderAdCard = (index: number) => (
+    <View key={index} style={styles.adCard}>
+      <Text style={styles.adText}>Тут може бути ваша реклама</Text>
+    </View>
+  );
+
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#E50914" />
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#E50914" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Верхній заголовок */}
-      <View style={styles.customHeader}>
-        <Text style={styles.logoText}>🌊 Ocean of Films</Text>
-        <TouchableOpacity style={styles.searchButton} onPress={() => router.push('/filters')}>
-          <Ionicons name="search" size={20} color="#000" />
-          <Text style={styles.searchButtonText}>Знайти</Text>
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        {/* Верхній заголовок */}
+        <View style={styles.customHeader}>
+          <Image
+            source={require('../assets/images/Logo.png')}
+            style={{ borderRadius: 50, width: 50, height: 50, resizeMode: 'contain' }}
+          />
+          <View style={{ width: 10 }} />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity
+              style={styles.glowButton}
+              onPress={() => router.push('/search')}
+            >
+              <Ionicons name="search" size={18} color="#000" />
+              <Text style={styles.glowButtonText}>Пошук</Text>
+            </TouchableOpacity>
 
-      {/* Контент в залежності від активної вкладки */}
-      <View style={styles.content}>
-        {activeTab === 'home' && (
-          <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-            <Text style={styles.heading}>🔥 Популярні фільми</Text>
+            <TouchableOpacity
+              style={styles.glowButton}
+              onPress={() => router.push('/filters')}
+            >
+              <Ionicons name="filter" size={18} color="#000" />
+              <Text style={styles.glowButtonText}>Обрати</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          {activeTab === 'home' && (
+            <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+              <Text style={styles.heading}>🔥 Популярні фільми</Text>
+              <FlatList
+                data={popularMovies.filter(movie => movie.poster_path)}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item) => item.id.toString()}
+                contentContainerStyle={styles.list}
+                snapToInterval={width * 0.65}
+                decelerationRate="fast"
+                renderItem={({ item }) => renderCard(item)}
+              />
+
+              <Text style={styles.heading}>⭐ Високо оцінені</Text>
+              <FlatList
+                data={topRatedMovies.filter(movie => movie.poster_path)}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item) => item.id.toString()}
+                contentContainerStyle={styles.list}
+                snapToInterval={width * 0.65}
+                decelerationRate="fast"
+                renderItem={({ item }) => renderCard(item)}
+              />
+
+              <Text style={styles.heading}>📺 Українські серіали</Text>
+              <FlatList
+                data={popularUkrTV.filter(tv => tv.poster_path)}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item) => item.id.toString()}
+                contentContainerStyle={styles.list}
+                snapToInterval={width * 0.65}
+                decelerationRate="fast"
+                renderItem={({ item }) => renderCard(item, true)}
+              />
+
+              <Text style={styles.heading}>📺 Польські серіали</Text>
+              <FlatList
+                data={latestPlTV.filter(tv => tv.poster_path)}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item) => item.id.toString()}
+                contentContainerStyle={styles.list}
+                snapToInterval={width * 0.65}
+                decelerationRate="fast"
+                renderItem={({ item }) => renderCard(item, true)}
+              />
+
+              {/* Карусель реклами */}
+              <Text style={styles.heading}>📢 Реклама</Text>
+              <FlatList
+                data={[0, 1, 2]}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item) => item.toString()}
+                contentContainerStyle={styles.list}
+                snapToInterval={width * 0.8}
+                decelerationRate="fast"
+                renderItem={({ item }) => renderAdCard(item)}
+              />
+            </ScrollView>
+          )}
+
+          {activeTab === 'favMovies' && (
             <FlatList
-              data={popularMovies}
-              horizontal
-              showsHorizontalScrollIndicator={false}
+              data={favoritesMovies.filter(movie => movie.poster_path)}
               keyExtractor={(item) => item.id.toString()}
-              contentContainerStyle={styles.list}
-              snapToInterval={width * 0.65}
-              decelerationRate="fast"
+              contentContainerStyle={styles.scrollContent}
               renderItem={({ item }) => renderCard(item)}
+              ListEmptyComponent={<Text style={styles.emptyText}>У вас немає обраних фільмів</Text>}
             />
+          )}
 
-            <Text style={styles.heading}>⭐ Високо оцінені</Text>
+          {activeTab === 'favTV' && (
             <FlatList
-              data={topRatedMovies}
-              horizontal
-              showsHorizontalScrollIndicator={false}
+              data={favoritesTV.filter(tv => tv.poster_path)}
               keyExtractor={(item) => item.id.toString()}
-              contentContainerStyle={styles.list}
-              snapToInterval={width * 0.65}
-              decelerationRate="fast"
-              renderItem={({ item }) => renderCard(item)}
-            />
-
-            <Text style={styles.heading}>📺 Найпопулярніші українські серіали</Text>
-            <FlatList
-              data={popularUkrTV}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(item) => item.id.toString()}
-              contentContainerStyle={styles.list}
-              snapToInterval={width * 0.65}
-              decelerationRate="fast"
+              contentContainerStyle={styles.scrollContent}
               renderItem={({ item }) => renderCard(item, true)}
+              ListEmptyComponent={<Text style={styles.emptyText}>У вас немає обраних серіалів</Text>}
             />
-          </ScrollView>
-        )}
+          )}
+        </View>
 
-        {activeTab === 'favMovies' && (
-          <ScrollView contentContainerStyle={{ padding: 20 }}>
-            {favoritesMovies.length === 0 ? (
-              <Text style={styles.emptyText}>У вас немає обраних фільмів</Text>
-            ) : (
-              favoritesMovies.map((item) => renderCard(item))
-            )}
-          </ScrollView>
-        )}
+        {/* Нижній таб-бар */}
+        <View style={styles.tabBar}>
+          <TouchableOpacity onPress={() => setActiveTab('favTV')}>
+            <Ionicons
+              name="tv"
+              size={28}
+              color={activeTab === 'favTV' ? '#fff' : 'rgba(255,255,255,0.4)'}
+            />
+          </TouchableOpacity>
+          
+          <TouchableOpacity onPress={() => setActiveTab('home')}>
+            <Ionicons
+              name="home"
+              size={28}
+              color={activeTab === 'home' ? '#fff' : 'rgba(255,255,255,0.4)'}
+            />
+          </TouchableOpacity>
 
-        {activeTab === 'favTV' && (
-          <ScrollView contentContainerStyle={{ padding: 20 }}>
-            {favoritesTV.length === 0 ? (
-              <Text style={styles.emptyText}>У вас немає обраних серіалів</Text>
-            ) : (
-              favoritesTV.map((item) => renderCard(item, true))
-            )}
-          </ScrollView>
-        )}
+          <TouchableOpacity onPress={() => setActiveTab('favMovies')}>
+            <Ionicons
+              name="film"
+              size={28}
+              color={activeTab === 'favMovies' ? '#fff' : 'rgba(255,255,255,0.4)'}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
-
-      {/* Нижній таб-бар */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('home')}
-        >
-          <Ionicons
-            name="home"
-            size={28}
-            color={activeTab === 'home' ? '#fff' : 'rgba(255, 255, 255, 0.5)'}
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('favMovies')}
-        >
-          <Ionicons
-            name="film"
-            size={28}
-            color={activeTab === 'favMovies' ? '#fff' : 'rgba(255, 255, 255, 0.5)'}
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('favTV')}
-        >
-          <Ionicons
-            name="tv"
-            size={28}
-            color={activeTab === 'favTV' ? '#fff' : 'rgba(255, 255, 255, 0.5)'}
-          />
-        </TouchableOpacity>
-      </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
-
+  safeArea: { flex: 1, backgroundColor: '#030f26' },
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
+  container: { flex: 1, backgroundColor: '#030f26' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   customHeader: {
+    height: 70,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    height: 90,
-    paddingTop: 10,
-    paddingBottom: 10,
-    backgroundColor: '#000',
   },
-  logoText: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-
-  searchButton: {
+  glowButton: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 255, 255, 1)',
+    paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 22,
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
-  searchButtonText: {
-    color: '#000',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-
-  content: {
-    flex: 1,
-  },
-
+  glowButtonText: { color: '#030f26', fontWeight: '600', fontSize: 14 },
   heading: {
     fontSize: 22,
     fontWeight: 'bold',
@@ -262,11 +325,7 @@ const styles = StyleSheet.create({
     marginTop: 40,
     marginBottom: 20,
   },
-
-  list: {
-    paddingLeft: 15,
-    paddingBottom: 30,
-  },
+  list: { paddingLeft: 15, paddingBottom: 30 },
   card: {
     width: width * 0.6,
     height: width,
@@ -276,33 +335,40 @@ const styles = StyleSheet.create({
     backgroundColor: '#1c1c1c',
     elevation: 5,
   },
-  poster: {
-    width: '100%',
-    height: width,
-  },
-
-  favoriteIcon: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-  },
-
-  tabBar: {
-    height: 60,
-    backgroundColor: '#111',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  tabItem: {
-    width: '33.33%',
+  poster: { width: '100%', height: width },
+  favoriteIcon: { position: 'absolute', bottom: 8, right: 8 },
+  adCard: {
+    width: width * 0.8,
+    height: width * 0.5,
+    marginRight: 15,
+    borderRadius: 15,
+    backgroundColor: '#3b3b3b',
     justifyContent: 'center',
     alignItems: 'center',
   },
-
+  adText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  tabBar: {
+    position: 'absolute',
+    bottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: 'rgba(3, 15, 38, 0.97)',
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    width: '70%',
+    height: 60,
+    alignSelf: 'center',
+    elevation: 5,
+  },
+  scrollContent: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
   emptyText: {
-    color: '#fff',
     fontSize: 16,
     textAlign: 'center',
     marginTop: 20,
+    color: '#fff',
   },
 });

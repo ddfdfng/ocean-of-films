@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ocean-of-films",
-    "slug": "ocean-of-films",
+    "slug": "ocan-of-films1",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -16,7 +16,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.ddfdfng.oceanoffilms"
     },
     "web": {
       "bundler": "metro",
@@ -41,9 +42,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "9fe16c90-b546-4d81-9f1b-fcfc900f401b"
+        "projectId": "3293ac5b-ea8a-42d9-a74f-635bf8afec95"
       }
     },
-    "owner": "ddfdfng"
+    "owner": "ddfdfng1"
   }
 }
