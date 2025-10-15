@@ -40,7 +40,7 @@ export default function FiltersScreen() {
 
   return (
     <View style={styles.wrapper}>
-      {/* Кнопка Назад */}
+      {/* Назад */}
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
         <Ionicons name="arrow-back" size={18} color="#000" />
         <Text style={styles.backText}>Назад</Text>
@@ -76,7 +76,7 @@ export default function FiltersScreen() {
           onPress={onShowPress}
         >
           <Text style={[styles.showButtonText, isShowEnabled && { color: '#000' }]}>
-            Показати {selectedCount > 0 ? `(${selectedCount})` : ''}
+            Показати
           </Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -87,18 +87,16 @@ export default function FiltersScreen() {
 const styles = StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: '#030f26', paddingTop: 50, paddingHorizontal: 20 },
   backButton: { 
-  flexDirection: 'row',
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 22,
     alignSelf: 'flex-start',
-    marginLeft: 0,
     marginBottom: 15,
   },
-    backText: { color: '#000', fontSize: 16, fontWeight: 'bold', marginLeft: 6 },
-
+  backText: { color: '#000', fontSize: 16, fontWeight: 'bold', marginLeft: 6 },
   section: { marginBottom: 25 },
   sectionTitle: { color: '#888', fontWeight: '600', marginBottom: 12, fontSize: 16 },
   row: { flexDirection: 'row', flexWrap: 'wrap' },
