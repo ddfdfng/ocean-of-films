@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   FlatList,
   Image,
@@ -15,9 +16,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  fetchPopularMovies,
   fetchLatestPlTVShows,
   fetchLatestUkrTVShows,
+  fetchPopularMovies,
   fetchTopRatedMovies,
 } from '../api/tmdb';
 
@@ -41,6 +42,43 @@ export default function HomeScreen() {
   const [favoritesTV, setFavoritesTV] = useState<any[]>([]);
   const router = useRouter();
 
+  // 🔹 Анімації для кожної іконки окремо
+  const scaleHome = useRef(new Animated.Value(1)).current;
+  const scaleFav = useRef(new Animated.Value(1)).current;
+  const scaleSettings = useRef(new Animated.Value(1)).current;
+
+  // 🔹 При зміні активної вкладки — лише вона анімується
+  useEffect(() => {
+    let anim;
+    switch (activeTab) {
+      case 'home':
+        anim = scaleHome;
+        break;
+      case 'favMovies':
+        anim = scaleFav;
+        break;
+      case 'favTV':
+        anim = scaleSettings;
+        break;
+      default:
+        return;
+    }
+
+    Animated.sequence([
+      Animated.timing(anim, {
+        toValue: 1.25,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.spring(anim, {
+        toValue: 1,
+        friction: 3,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [activeTab]);
+
+  // 🔹 Завантаження даних
   useEffect(() => {
     const loadAll = async () => {
       const [popMovies, topMovies, ukrTV, plTV] = await Promise.all([
@@ -177,6 +215,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Контент сторінки */}
         <View style={styles.content}>
           {activeTab === 'home' && (
             <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
@@ -228,7 +267,6 @@ export default function HomeScreen() {
                 renderItem={({ item }) => renderCard(item, true)}
               />
 
-              {/* Карусель реклами */}
               <Text style={styles.heading}>📢 Реклама</Text>
               <FlatList
                 data={[0, 1, 2]}
@@ -266,29 +304,35 @@ export default function HomeScreen() {
 
         {/* Нижній таб-бар */}
         <View style={styles.tabBar}>
-          <TouchableOpacity onPress={() => setActiveTab('favTV')}>
-            <Ionicons
-              name="tv"
-              size={28}
-              color={activeTab === 'favTV' ? '#fff' : 'rgba(255,255,255,0.4)'}
-            />
-          </TouchableOpacity>
-          
-          <TouchableOpacity onPress={() => setActiveTab('home')}>
-            <Ionicons
-              name="home"
-              size={28}
-              color={activeTab === 'home' ? '#fff' : 'rgba(255,255,255,0.4)'}
-            />
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: scaleFav }] }}>
+            <TouchableOpacity onPress={() => setActiveTab('favMovies')}>
+              <Ionicons
+                name="heart"
+                size={30}
+                color={activeTab === 'favMovies' ? '#fff' : 'rgba(255,255,255,0.4)'}
+              />
+            </TouchableOpacity>
+          </Animated.View>
 
-          <TouchableOpacity onPress={() => setActiveTab('favMovies')}>
-            <Ionicons
-              name="film"
-              size={28}
-              color={activeTab === 'favMovies' ? '#fff' : 'rgba(255,255,255,0.4)'}
-            />
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: scaleHome }] }}>
+            <TouchableOpacity onPress={() => setActiveTab('home')}>
+              <Ionicons
+                name="home"
+                size={34}
+                color={activeTab === 'home' ? '#fff' : 'rgba(255,255,255,0.4)'}
+              />
+            </TouchableOpacity>
+          </Animated.View>
+
+          <Animated.View style={{ transform: [{ scale: scaleSettings }] }}>
+            <TouchableOpacity onPress={() => setActiveTab('favTV')}>
+              <Ionicons
+                name="settings"
+                size={30}
+                color={activeTab === 'favTV' ? '#fff' : 'rgba(255,255,255,0.4)'}
+              />
+            </TouchableOpacity>
+          </Animated.View>
         </View>
       </View>
     </SafeAreaView>

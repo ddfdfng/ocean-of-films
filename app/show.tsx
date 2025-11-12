@@ -1,200 +1,201 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Dimensions,
-    FlatList,
-    Image,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { fetchFilteredMovies, fetchFilteredTV } from '../api/tmdb';
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  ImageBackground,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Swiper from "react-native-deck-swiper";
+import { fetchFilteredMovies, fetchFilteredTV } from "../api/tmdb";
 
-const { width } = Dimensions.get('window');
-const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
+const { width, height } = Dimensions.get("window");
+const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500";
 
 export default function ShowScreen() {
-  const router = useRouter();
   const params = useLocalSearchParams();
+  const router = useRouter();
 
-  const [items, setItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const type = params.type === 'Серіали' ? 'tv' : 'movie';
+  const type = params.type === "Серіали" ? "tv" : "movie";
   const genre = params.genre;
-  const year = params.year;
-  const country = params.country; // враховуємо країну
+  const sort = params.sort;
+  const country = params.country;
+
+  const [cards, setCards] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const swiperRef = useRef<Swiper<any>>(null);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        let data: any[] = [];
-        if (type === 'movie') {
-          data = await fetchFilteredMovies({ genre, year, country });
-        } else {
-          data = await fetchFilteredTV({ genre, year, country });
-        }
-        setItems(data);
-      } catch (error) {
-        console.error('Помилка завантаження:', error);
-        setItems([]);
-      } finally {
-        setLoading(false);
+    loadMoreCards(page);
+  }, [type, genre, sort, country]);
+
+  // Завантажуємо нові картки
+  const loadMoreCards = async (pageToLoad: number) => {
+    try {
+      if (loadingMore) return;
+      setLoadingMore(true);
+
+      const filterParams: any = { genre, country, sort, page: pageToLoad };
+      const data =
+        type === "movie"
+          ? await fetchFilteredMovies(filterParams)
+          : await fetchFilteredTV(filterParams);
+
+      if (data && data.length) {
+        setCards(prev => [...prev, ...data]);
+        setPage(prev => prev + 1);
       }
-    };
-    load();
-  }, [type, genre, year, country]);
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#E50914" />
-        </View>
-      </SafeAreaView>
-    );
-  }
+    } catch (error) {
+      console.error("Помилка завантаження:", error);
+      Alert.alert("Помилка", "Не вдалося завантажити дані");
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
 
-  if (!items || items.length === 0) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <Text style={{ color: '#fff' }}>Нічого не знайдено</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const renderCard = ({ item }: { item: any }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() =>
-        router.push({
-          pathname: '/details',
-          params: { id: item.id.toString(), type },
-        })
+  const addFavorite = async (card: any) => {
+    try {
+      const key = type === "movie" ? "favoritesMovies" : "favoritesTV";
+      const stored = await AsyncStorage.getItem(key);
+      let arr = stored ? JSON.parse(stored) : [];
+      if (!arr.find((i: any) => i.id === card.id)) {
+        arr.push(card);
+        await AsyncStorage.setItem(key, JSON.stringify(arr));
+        Alert.alert("❤️ Додано в обране", card.title || card.name);
       }
-    >
-      <Image
-        source={{ uri: `${IMAGE_BASE_URL}${item.poster_path}` }}
-        style={styles.poster}
-      />
-      <View style={styles.cardInfo}>
-        <Text style={styles.title} numberOfLines={1}>
-          {item.title || item.name}
-        </Text>
-        {item.vote_average ? (
-          <Text style={styles.rating}>⭐ {item.vote_average.toFixed(1)}/10</Text>
-        ) : null}
+    } catch (e) {
+      console.error("Error saving favorite", e);
+    }
+  };
+
+  const handleSwipedBottom = (index: number) => {
+    const card = cards[index];
+    if (card) addFavorite(card);
+  };
+
+  const handleSwipedAll = () => {
+    // Коли свайпнув всі, підвантажуємо наступну сторінку
+    loadMoreCards(page);
+  };
+
+  if (loading && cards.length === 0) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#ff4d4d" />
+        <Text style={{ marginTop: 10, color: "#555" }}>Завантаження...</Text>
       </View>
-    </TouchableOpacity>
-  );
+    );
+  }
+
+  if (!cards.length) {
+    return (
+      <View style={styles.center}>
+        <Text style={{ fontSize: 18, color: "#777" }}>
+          Нічого не знайдено 😕
+        </Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={20} color="#fff" />
+          <Text style={styles.backText}>Назад</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      {/* Текст зверху */}
-      <Text style={styles.headerText}>Результат за вибраними фільтрами</Text>
-
-      <FlatList
-        horizontal
-        data={items}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderCard}
-        contentContainerStyle={styles.carousel}
-        showsHorizontalScrollIndicator={false}
-        snapToInterval={width * 0.45}
-        decelerationRate="fast"
-      />
-
-      {/* Кнопка Назад */}
-      <TouchableOpacity
-        style={styles.floatingBackButton}
-        onPress={() => router.back()}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="arrow-back" size={18} color="#000" />
-        <Text style={styles.floatingBackText}>Назад</Text>
+    <View style={styles.container}>
+      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <Ionicons name="arrow-back-circle" size={42} color="#fff" />
       </TouchableOpacity>
-    </SafeAreaView>
+
+      <Swiper
+        ref={swiperRef}
+        cards={cards}
+        renderCard={(card) => (
+          <View style={styles.cardContainer}>
+            <ImageBackground
+              source={{
+                uri: card.poster_path
+                  ? `${IMAGE_BASE_URL}${card.poster_path}`
+                  : "https://via.placeholder.com/500x750?text=No+Image",
+              }}
+              style={styles.poster}
+              imageStyle={{ borderRadius: 20 }}
+            >
+              <View style={styles.overlay}>
+                <Text style={styles.title}>{card.title || card.name}</Text>
+                <Text style={styles.info}>
+                  ⭐ {card.vote_average?.toFixed(1)} |{" "}
+                  {card.release_date || card.first_air_date || "Невідомо"}
+                </Text>
+                <Text style={styles.overview} numberOfLines={5}>
+                  {card.overview || "Без опису"}
+                </Text>
+              </View>
+            </ImageBackground>
+          </View>
+        )}
+        onSwipedBottom={handleSwipedBottom}
+        onSwipedAll={handleSwipedAll}
+        stackSize={3}
+        verticalSwipe={true}
+        animateCardOpacity
+        backgroundColor="#0d0d0d"
+        cardVerticalMargin={20}
+        disableTopSwipe
+        disableLeftSwipe={false}
+        disableRightSwipe={false}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#030f26', // темний фон
+  container: { flex: 1, backgroundColor: "#000", alignItems: "center" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  cardContainer: {
+    width: width * 0.9,
+    height: height * 0.75,
+    borderRadius: 20,
+    shadowColor: "#fff",
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    overflow: "hidden",
   },
-  headerText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginVertical: 10,
-    marginTop: 30,
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  carousel: {
-    paddingLeft: 15,
-    paddingBottom: 0,
-    paddingTop: 90,
-    height: 290,
-  },
-  card: {
-    width: width * 0.42,
-    height: 285,
-    backgroundColor: '#062152ff',
-    borderRadius: 14,
-    overflow: 'hidden',
-    marginRight: 15,
-    alignItems: 'center',
-  },
-  poster: {
-    width: '100%',
-    height: width * 0.6, // зменшена висота
-    borderTopLeftRadius: 14,
-    borderTopRightRadius: 14,
-  },
-  cardInfo: {
-    padding: 6,
-    alignItems: 'center',
-  },
+  poster: { flex: 1, justifyContent: "flex-end" },
+  overlay: { backgroundColor: "rgba(0,0,0,0.55)", padding: 16 },
   title: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 13,
-    textAlign: 'center',
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#fff",
+    textAlign: "center",
+    marginBottom: 4,
   },
-  rating: {
-    color: '#FFD700',
-    fontWeight: '600',
-    fontSize: 12,
-    marginTop: 2,
+  info: { color: "#ffcc00", textAlign: "center", marginBottom: 6 },
+  overview: { color: "#ccc", textAlign: "center", fontSize: 14 },
+  backButton: {
+    position: "absolute",
+    top: 40,
+    left: 20,
+    zIndex: 10,
   },
-  floatingBackButton: {
-    position: 'absolute',
-    bottom: '35%', // трохи нижче центру
-    left: width / 2 - 60,
-    width: 120,
-    height: 45,
-    backgroundColor: '#fff',
-    borderRadius: 22.5,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+  backBtn: {
+    flexDirection: "row",
+    backgroundColor: "#ff4d4d",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
+    alignItems: "center",
+    marginTop: 20,
   },
-  floatingBackText: {
-    marginLeft: 6,
-    fontWeight: 'bold',
-    color: '#000',
-    fontSize: 15,
-  },
+  backText: { color: "#fff", marginLeft: 8, fontSize: 16 },
 });

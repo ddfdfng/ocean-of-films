@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const FILTERS = {
   type: ['Фільми', 'Серіали'],
   genre: ['Драма', 'Комедія', 'Бойовик', 'Фантастика'],
-  year: ['2025', '2024', '2023', '2022', '2021'],
+  sort: ['Всі', 'Найновіші', 'Найпопулярніші'],
   country: ['США', 'Велика Британія', 'Україна'],
 };
 
@@ -16,7 +16,7 @@ export default function FiltersScreen() {
   const [selected, setSelected] = useState({
     type: '',
     genre: '',
-    year: '',
+    sort: 'Всі',
     country: '',
   });
 
@@ -27,14 +27,14 @@ export default function FiltersScreen() {
     }));
   };
 
-  const isShowEnabled = Object.values(selected).some((v) => v !== '');
-  const selectedCount = Object.values(selected).filter((v) => v !== '').length;
+  const isShowEnabled = Object.values(selected).some((v) => v !== '' && v !== 'Всі');
 
   const onShowPress = () => {
     const params = Object.entries(selected)
-      .filter(([, value]) => value !== '')
+      .filter(([, value]) => value !== '' && value !== 'Всі')
       .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
       .join('&');
+
     router.push(`/show?${params}`);
   };
 
@@ -54,7 +54,10 @@ export default function FiltersScreen() {
               {values.map((value) => {
                 const selectedValue = selected[category as keyof typeof FILTERS] === value;
                 return (
-                  <TouchableOpacity key={value} onPress={() => toggle(category as keyof typeof FILTERS, value)}>
+                  <TouchableOpacity
+                    key={value}
+                    onPress={() => toggle(category as keyof typeof FILTERS, value)}
+                  >
                     <View style={[styles.option, selectedValue && styles.optionSelected]}>
                       <Text style={[styles.optionText, selectedValue && styles.optionTextSelected]}>
                         {value}
